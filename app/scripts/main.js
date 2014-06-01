@@ -34,7 +34,17 @@ function handleDragOver(evt) {
     evt.dataTransfer.dropEffect = 'copy'; // Explicitly show this is a copy.
 }
 
-function filter(imgObj, method) {
+function initDragDrop(){
+    if (window.File && window.FileReader && window.FileList && window.Blob) {
+        var dropZone = document.getElementById('drop-zone');
+        dropZone.addEventListener('dragover', handleDragOver, false);
+        dropZone.addEventListener('drop', handleFileSelect, false);
+    } else {
+        alert('The File APIs are not fully supported in this browser.');
+    }
+}
+
+function filter( imgObj, method ) {
     var canvas = document.createElement('canvas');
     var canvasContext = canvas.getContext('2d');
 
@@ -46,55 +56,37 @@ function filter(imgObj, method) {
     canvasContext.drawImage(imgObj, 0, 0);
     var imgPixels = canvasContext.getImageData(0, 0, imgW, imgH);
 
-    imgPixels = method === 'sepia' ? sepiaFilter(imgPixels) : grayFilter(imgPixels);
-    canvasContext.putImageData(imgPixels, 0, 0, 0, 0, imgPixels.width, imgPixels.height);
-    return canvas.toDataURL();
-}
+    var myWorker = new Worker("scripts/image-worker.js");
+    myWorker.onmessage = function (oEvent) {
+        imgPixels = oEvent.data;
+        canvasContext.putImageData(imgPixels, 0, 0, 0, 0, imgPixels.width, imgPixels.height);
+        imgObj.src = canvas.toDataURL();
+    };
 
-function grayFilter(imgPixels) {
-    for (var y = 0; y < imgPixels.height; y++) {
-        for (var x = 0; x < imgPixels.width; x++) {
-            var i = (y * 4) * imgPixels.width + x * 4;
-            var avg = (imgPixels.data[i] + imgPixels.data[i + 1] + imgPixels.data[i + 2]) / 3;
-            imgPixels.data[i] = avg;
-            imgPixels.data[i + 1] = avg;
-            imgPixels.data[i + 2] = avg;
-        }
-    }
-    return imgPixels;
-}
-
-function sepiaFilter(imgPixels) {
-    for (var y = 0; y < imgPixels.height; y++) {
-        for (var x = 0; x < imgPixels.width; x++) {
-            var i = (y * 4) * imgPixels.width + x * 4,
-                red = imgPixels.data[i],
-                green = imgPixels.data[i + 1],
-                blue = imgPixels.data[i + 2];
-            imgPixels.data[i] = (red * 0.393) + (green * 0.769) + (blue * 0.189);
-            imgPixels.data[i + 1] = (red * 0.349) + (green * 0.686) + (blue * 0.168);
-            imgPixels.data[i + 2] = (red * 0.272) + (green * 0.534) + (blue * 0.131);
-        }
-    }
-    return imgPixels;
+    myWorker.postMessage({
+        pixels: imgPixels,
+        type: method
+    });
 }
 
 $(function () {
-    if (window.File && window.FileReader && window.FileList && window.Blob) {
-        var dropZone = document.getElementById('drop-zone');
-        dropZone.addEventListener('dragover', handleDragOver, false);
-        dropZone.addEventListener('drop', handleFileSelect, false);
-    } else {
-        alert('The File APIs are not fully supported in this browser.');
-    }
+    initDragDrop();
 
     $('#grayscale').click(function () {
         var imgObj = document.getElementById('img-to-filter');
-        imgObj.src = filter(imgObj, 'grayscale');
+        if( imgObj === null) {
+            alert('Please drag an image');
+            return;
+        }
+        filter(imgObj, 'grayscale');
     });
 
     $('#sepia').click(function () {
         var imgObj = document.getElementById('img-to-filter');
-        imgObj.src = filter(imgObj, 'sepia');
+        if( imgObj === null) {
+            alert('Please drag an image');
+            return;
+        }
+        filter(imgObj, 'sepia');
     });
 });
